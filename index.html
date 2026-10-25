@@ -12,20 +12,22 @@ function parse(j){
  const o={};c.forEach(x=>o[x.name]=(o[x.name]||0)+x.votes);return o;
 }
 function ballotInfo(j){
- const c=(j.carg||[]).find(x=>String(x.cd)==='1');
- if(!c||c.vb==null||c.vn==null)return null;
- const white=Number(c.vb),nulls=Number(c.vn);
+ // No EA20, os totais de votos ficam no objeto raiz "v", não em "carg".
+ const v=j.v;
+ if(!v||v.vb==null||(v.tvn==null&&v.vn==null))return null;
+ const white=Number(v.vb),nulls=Number(v.tvn??v.vn);
+ const total= v.tv==null?null:Number(v.tv);
  if(!Number.isSafeInteger(white)||!Number.isSafeInteger(nulls)||white<0||nulls<0)return null;
- return {white,nulls};
+ return {white,nulls,total:Number.isSafeInteger(total)&&total>=white+nulls?total:null};
 }
 function ballotSum(states){
  const values=states.map(uf=>ballotData[uf]);
  if(values.some(v=>!v))return null;
- return {white:values.reduce((a,v)=>a+v.white,0),nulls:values.reduce((a,v)=>a+v.nulls,0)};
+ return {white:values.reduce((a,v)=>a+v.white,0),nulls:values.reduce((a,v)=>a+v.nulls,0),total:values.every(v=>v.total!=null)?values.reduce((a,v)=>a+v.total,0):null};
 }
 function ballotHtml(b,votes){
- if(!b)return '<p class="muted">Brancos e nulos: aguardando dados oficiais.</p>';
- const valid=Object.values(votes||{}).reduce((a,v)=>a+v,0),total=valid+b.white+b.nulls;
+ if(!b)return '<p class="muted">Brancos e nulos: dados indisponíveis nesta consulta.</p>';
+ const valid=Object.values(votes||{}).reduce((a,v)=>a+v,0),total=b.total??(valid+b.white+b.nulls);
  const pct=n=>total?(100*n/total).toFixed(2).replace('.',','):'0,00';
  return `<div class="secoes"><strong>Votos brancos e nulos</strong><div>Brancos: ${b.white.toLocaleString('pt-BR')} (${pct(b.white)}%) · Nulos: ${b.nulls.toLocaleString('pt-BR')} (${pct(b.nulls)}%)</div><small>Percentuais sobre os votos apurados, incluindo válidos, brancos e nulos.</small></div>`;
 }
