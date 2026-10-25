@@ -1,6 +1,6 @@
 <!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Painel Eleições 2026</title><style>body{font:16px system-ui;background:#0c1527;color:#f4f7ff;margin:0;padding:20px}main{max-width:980px;margin:auto}header,.card{background:#19253c;border-radius:16px;padding:20px;margin-bottom:16px}h1{margin:0}small{color:#afbed8}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.row{margin:16px 0}.secoes{margin:12px 0 18px;font-size:14px}.secoes .bar{height:12px;margin-top:8px}.muted{color:#afbed8;font-size:14px}.bar{height:20px;background:#34435b;border-radius:8px;overflow:hidden;display:flex}.bar span{background:#56b6d9}.bar span+span{background:#e8b75d}button,select{padding:10px;border-radius:9px;background:#243651;color:white;border:1px solid #50617b}button{cursor:pointer}.error{color:#ffb6b6}a{color:#9ad7ff}</style></head><body><main><header><h1>Apuração Brasil 2026</h1><p>Presidência · Segundo turno · Fonte: TSE</p><small id="status">Aguardando consulta oficial…</small><p><button onclick="update()">Atualizar agora</button></p></header><section class="card"><h2>Brasil</h2><div id="br">Sem dados confirmados</div><small id="progress"></small></section><h2>Resultados por região</h2><section class="grid" id="regions"></section><section class="card"><h2>Detalhamento por estado</h2><select id="region" onchange="draw()"><option value="">Todas as regiões</option></select><div id="states"></div></section><small>Atualização tentada a cada 30 segundos. Dados parciais não são projeções. Se a fonte não estiver acessível, nenhum percentual é estimado.</small></main><script>
 const groups={'Norte':['AC','AP','AM','PA','RO','RR','TO'],'Nordeste':['AL','BA','CE','MA','PB','PE','PI','RN','SE'],'Centro-Oeste':['DF','GO','MT','MS'],'Sudeste':['ES','MG','RJ','SP'],'Sul':['PR','RS','SC'],'Exterior':['ZZ']};
-const BASE='https://resultados.tse.jus.br/oficial/ele2026/6258/dados/';const codes=Object.values(groups).flat().filter(x=>x!=='ZZ');let data={};let national=null;let lastOfficial="";let sections={};let nationalSections=null;document.querySelector('#region').innerHTML+='<option>'+Object.keys(groups).join('</option><option>')+'</option>';
+const BASE='https://resultados.tse.jus.br/oficial/ele2026/6258/dados/';const codes=Object.values(groups).flat().filter(x=>x!=='ZZ');let data={};let national=null;let lastOfficial="";let sections={};let nationalSections=null;let ballotData={};let nationalBallots=null;document.querySelector('#region').innerHTML+='<option>'+Object.keys(groups).join('</option><option>')+'</option>';
 function candidates(j){
  const cargo=(j.carg||[]).find(x=>String(x.cd)==='1');
  return (cargo?.agr||[]).flatMap(a=>(a.par||[]).flatMap(p=>p.cand||[]))
@@ -10,6 +10,24 @@ function candidates(j){
 function parse(j){
  const c=candidates(j);if(!c.length)return null;
  const o={};c.forEach(x=>o[x.name]=(o[x.name]||0)+x.votes);return o;
+}
+function ballotInfo(j){
+ const c=(j.carg||[]).find(x=>String(x.cd)==='1');
+ if(!c||c.vb==null||c.vn==null)return null;
+ const white=Number(c.vb),nulls=Number(c.vn);
+ if(!Number.isSafeInteger(white)||!Number.isSafeInteger(nulls)||white<0||nulls<0)return null;
+ return {white,nulls};
+}
+function ballotSum(states){
+ const values=states.map(uf=>ballotData[uf]);
+ if(values.some(v=>!v))return null;
+ return {white:values.reduce((a,v)=>a+v.white,0),nulls:values.reduce((a,v)=>a+v.nulls,0)};
+}
+function ballotHtml(b,votes){
+ if(!b)return '<p class="muted">Brancos e nulos: aguardando dados oficiais.</p>';
+ const valid=Object.values(votes||{}).reduce((a,v)=>a+v,0),total=valid+b.white+b.nulls;
+ const pct=n=>total?(100*n/total).toFixed(2).replace('.',','):'0,00';
+ return `<div class="secoes"><strong>Votos brancos e nulos</strong><div>Brancos: ${b.white.toLocaleString('pt-BR')} (${pct(b.white)}%) · Nulos: ${b.nulls.toLocaleString('pt-BR')} (${pct(b.nulls)}%)</div><small>Percentuais sobre os votos apurados, incluindo válidos, brancos e nulos.</small></div>`;
 }
 function sec(j){
  const x=Array.isArray(j.s)?j.s[0]:j.s;
@@ -30,10 +48,10 @@ function secHtml(v){
 function combine(states){let o={};states.forEach(s=>Object.entries(data[s]||{}).forEach(([n,v])=>o[n]=(o[n]||0)+v));return o;}
 function result(o){let entries=Object.entries(o).sort((a,b)=>b[1]-a[1]);if(!entries.length)return '<small>Sem dados oficiais disponíveis</small>';let total=entries.reduce((s,x)=>s+x[1],0);return entries.map(([n,v],i)=>`<div class="row"><strong>${n.replaceAll('<','&lt;')}</strong> · ${total?(100*v/total).toFixed(2):'0'}% · ${v.toLocaleString('pt-BR')} votos<div class="bar"><span style="width:${total?100*v/total:0}%;background:${(/LULA/i.test(n)?'#dc3545':/FLAVIO|FLÁVIO/i.test(n)?'#159447':'#8e9ac0')}"></span></div></div>`).join('');}
 function draw(){
- document.querySelector('#br').innerHTML=secHtml(nationalSections)+result(national||{});
- document.querySelector('#regions').innerHTML=Object.entries(groups).map(([name,states])=>`<article class="card"><h3>${name}</h3>${secHtml(secGroup(states))}${result(combine(states))}</article>`).join('');
+ document.querySelector('#br').innerHTML=secHtml(nationalSections)+result(national||{})+ballotHtml(nationalBallots,national);
+ document.querySelector('#regions').innerHTML=Object.entries(groups).map(([name,states])=>`<article class="card"><h3>${name}</h3>${secHtml(secGroup(states))}${result(combine(states))}${ballotHtml(ballotSum(states),combine(states))}</article>`).join('');
  let selected=document.querySelector('#region').value;
- document.querySelector('#states').innerHTML=(selected?groups[selected]:codes).map(uf=>`<div class="row"><h3>${uf==='ZZ'?'Exterior':uf}</h3>${secHtml(sections[uf]||null)}${result(data[uf]||{})}</div>`).join('');
+ document.querySelector('#states').innerHTML=(selected?groups[selected]:codes).map(uf=>`<div class="row"><h3>${uf==='ZZ'?'Exterior':uf}</h3>${secHtml(sections[uf]||null)}${result(data[uf]||{})}${ballotHtml(ballotData[uf],data[uf])}</div>`).join('');
 }
 async function update(){
  const stamp=Date.now(),nonce='v='+stamp;
@@ -45,6 +63,7 @@ async function update(){
   if(!parsed)throw Error('Formato nacional não reconhecido');
   national=parsed;
   nationalSections=sec(br);
+  nationalBallots=ballotInfo(br);
   official=`${br.dt||br.dg||''} ${br.ht||br.hg||''}`.trim();
   lastOfficial=official;
   document.querySelector('#progress').textContent=`Atualização oficial do TSE: ${official||'não informada'} (a consulta não altera esse horário)`;
@@ -55,7 +74,7 @@ async function update(){
   try{
    const j=await get(`${BASE}${uf.toLowerCase()}/${uf.toLowerCase()}-c0001-e006258-u.json`);
    const parsed=parse(j);
-   if(parsed){data[uf]=parsed;sections[uf]=sec(j);if(uf==='ZZ')exteriorOk=true;else success++}
+   if(parsed){data[uf]=parsed;sections[uf]=sec(j);ballotData[uf]=ballotInfo(j);if(uf==='ZZ')exteriorOk=true;else success++}
   }catch(e){}
  }));
  document.querySelector('#status').textContent=`Consulta: ${new Date().toLocaleTimeString('pt-BR')} · ${success} de 27 UFs consultadas · Exterior: ${exteriorOk?'consultado':'indisponível'} · Oficial: ${official||'indisponível'}`;
