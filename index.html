@@ -1,6 +1,6 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Painel Eleições 2026</title><style>body{font:16px system-ui;background:#0c1527;color:#f4f7ff;margin:0;padding:20px}main{max-width:980px;margin:auto}header,.card{background:#19253c;border-radius:16px;padding:20px;margin-bottom:16px}h1{margin:0}small{color:#afbed8}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.row{margin:16px 0}.secoes{margin:12px 0 18px;font-size:14px}.secoes .bar{height:12px;margin-top:8px}.muted{color:#afbed8;font-size:14px}.bar{height:20px;background:#34435b;border-radius:8px;overflow:hidden;display:flex}.bar span{background:#56b6d9}.bar span+span{background:#e8b75d}button,select{padding:10px;border-radius:9px;background:#243651;color:white;border:1px solid #50617b}button{cursor:pointer}.error{color:#ffb6b6}a{color:#9ad7ff}</style></head><body><main><header><h1>Apuração Brasil 2026</h1><p>Presidência · Segundo turno · Fonte: TSE</p><small id="status">Aguardando consulta oficial…</small><p><button onclick="update()">Atualizar agora</button></p></header><section class="card"><h2>Brasil</h2><div id="br">Sem dados confirmados</div><small id="progress"></small></section><h2>Resultados por região</h2><section class="grid" id="regions"></section><section class="card"><h2>Detalhamento por estado</h2><select id="region" onchange="draw()"><option value="">Todas as regiões</option></select><div id="states"></div></section><small>Atualização tentada a cada 60 segundos. Dados parciais não são projeções. Se a fonte não estiver acessível, nenhum percentual é estimado.</small></main><script>
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Painel Eleições 2026</title><style>body{font:16px system-ui;background:#0c1527;color:#f4f7ff;margin:0;padding:20px}main{max-width:980px;margin:auto}header,.card{background:#19253c;border-radius:16px;padding:20px;margin-bottom:16px}h1{margin:0}small{color:#afbed8}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.row{margin:16px 0}.secoes{margin:12px 0 18px;font-size:14px}.secoes .bar{height:12px;margin-top:8px}.muted{color:#afbed8;font-size:14px}.bar{height:20px;background:#34435b;border-radius:8px;overflow:hidden;display:flex}.bar span{background:#56b6d9}.bar span+span{background:#e8b75d}button,select{padding:10px;border-radius:9px;background:#243651;color:white;border:1px solid #50617b}button{cursor:pointer}.error{color:#ffb6b6}a{color:#9ad7ff}</style></head><body><main><header><h1>Apuração Brasil 2026</h1><p>Presidência · Segundo turno · Fonte: TSE</p><small id="status">Aguardando consulta oficial…</small><p><button onclick="update()">Atualizar agora</button></p></header><section class="card"><h2>Brasil</h2><div id="br">Sem dados confirmados</div><small id="progress"></small></section><h2>Resultados por região</h2><section class="grid" id="regions"></section><section class="card"><h2>Detalhamento por estado</h2><select id="region" onchange="draw()"><option value="">Todas as regiões</option></select><div id="states"></div></section><small>Atualização tentada a cada 30 segundos. Dados parciais não são projeções. Se a fonte não estiver acessível, nenhum percentual é estimado.</small></main><script>
 const groups={'Norte':['AC','AP','AM','PA','RO','RR','TO'],'Nordeste':['AL','BA','CE','MA','PB','PE','PI','RN','SE'],'Centro-Oeste':['DF','GO','MT','MS'],'Sudeste':['ES','MG','RJ','SP'],'Sul':['PR','RS','SC'],'Exterior':['ZZ']};
-const BASE='https://resultados.tse.jus.br/oficial/ele2026/6258/dados/';const codes=Object.values(groups).flat().filter(x=>x!=='ZZ');let data={};let national=null;let lastOfficial="";let sections={};let nationalSections=null;let ballotData={};let nationalBallots=null;let updateBusy=false;let lastSuccess=0;document.querySelector('#region').innerHTML+='<option>'+Object.keys(groups).join('</option><option>')+'</option>';
+const BASE='https://resultados.tse.jus.br/oficial/ele2026/6258/dados/';const codes=Object.values(groups).flat().filter(x=>x!=='ZZ');let data={};let national=null;let lastOfficial="";let sections={};let nationalSections=null;let ballotData={};let nationalBallots=null;document.querySelector('#region').innerHTML+='<option>'+Object.keys(groups).join('</option><option>')+'</option>';
 function candidates(j){
  const cargo=(j.carg||[]).find(x=>String(x.cd)==='1');
  return (cargo?.agr||[]).flatMap(a=>(a.par||[]).flatMap(p=>p.cand||[]))
@@ -57,7 +57,7 @@ function draw(){
 }
 async function update(){
  const stamp=Date.now(),nonce='v='+stamp;
- const get=async url=>{const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return r.json()};
+ const get=async url=>{const r=await fetch(url+(url.includes('?')?'&':'?')+nonce,{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return r.json()};
  let success=0,exteriorOk=false,official='';
  try{
   const br=await get(`${BASE}br/br-c0001-e006258-u.json`);
@@ -83,68 +83,58 @@ async function update(){
  draw();
 }
 
-let abroadCities=[], abroadCountryMap={}, abroadCache={}, abroadLoading=false, abroadMessage='Selecione “Carregar países” para consultar as localidades do exterior.';
-const abroadConfigUrl=BASE.replace('/dados/','/config/')+'mun-e006258-cm.json';
-const abroadWait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-let abroadCooldownUntil=0;
-try{abroadCooldownUntil=Number(localStorage.getItem('abroadCooldownUntil')||0)}catch(e){}
-try{abroadCache=JSON.parse(localStorage.getItem('abroadCache')||'{}');abroadCities=JSON.parse(localStorage.getItem('abroadCities')||'[]')}catch(e){}
-function abroadSave(){try{localStorage.setItem('abroadCache',JSON.stringify(abroadCache));localStorage.setItem('abroadCities',JSON.stringify(abroadCities))}catch(e){}}
-function abroadThrottle(seconds=900){abroadCooldownUntil=Date.now()+seconds*1000;try{localStorage.setItem('abroadCooldownUntil',String(abroadCooldownUntil))}catch(e){}}
-function esc(t){return String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function abroadHtml(){
- const country={};let unmatched=0;
- for(const city of abroadCities){
-  const item=abroadCache[city.cd];if(!item)continue;
-  const p=abroadCountryMap[city.cd]||'País não identificado';
-  (country[p]??=[]).push(item);
-  if(p==='País não identificado')unmatched++;
+// Detalhamento por país: correspondência local validada, sem consultar /config/.
+// Formato esperado: window.EXTERIOR_LOCALIDADES = [{codigo:"29254",cidade:"Abidjã",pais:"Costa do Marfim"}, ...]
+// A lista só é usada após o usuário fornecer o arquivo de correspondência validado.
+let exteriorLocais=[], exteriorCarregado=false, exteriorEmAndamento=false, exteriorErro='';
+function exteriorPainel(){
+ const lista=window.EXTERIOR_LOCALIDADES;
+ if(!Array.isArray(lista)||!lista.length)
+   return '<h3>Detalhamento do Exterior por país</h3><p class="muted">Aguardando tabela de correspondência validada (código eleitoral → país). O consolidado oficial permanece disponível. Nenhuma consulta adicional será feita.</p>';
+ if(!exteriorCarregado)
+   return '<h3>Detalhamento do Exterior por país</h3><p class="muted">Tabela local: '+lista.length+' localidades. Consultas adicionais somente ao tocar no botão.</p><button onclick="carregarPaises()">Carregar países</button>';
+ if(exteriorEmAndamento)return '<h3>Detalhamento do Exterior por país</h3><p class="muted">Carregando localidades com intervalo entre consultas…</p>';
+ let ok=exteriorLocais.filter(x=>x.resultado), faltas=exteriorLocais.filter(x=>!x.resultado);
+ let porPais={};
+ for(const x of ok){
+   let a=porPais[x.pais]??={votos:{},secoes:[],brancos:0,nulos:0};
+   Object.entries(x.resultado).forEach(([n,v])=>a.votos[n]=(a.votos[n]||0)+v);
+   if(x.secoes)a.secoes.push(x.secoes);
+   if(x.boletim){a.brancos+=x.boletim.white;a.nulos+=x.boletim.nulls}
  }
- const cards=Object.entries(country).sort((a,b)=>a[0].localeCompare(b[0],'pt-BR')).map(([name,items])=>{
- const votes={};let done=0,total=0,white=0,nulls=0,allSections=true,allBallots=true;
- for(const it of items){Object.entries(it.votes).forEach(([k,v])=>votes[k]=(votes[k]||0)+v);
- if(it.sections){done+=it.sections.done;total+=it.sections.total}else allSections=false;
- if(it.ballots){white+=it.ballots.white;nulls+=it.ballots.nulls}else allBallots=false}
- return `<details class="card"><summary><strong>${esc(name)}</strong> · ${items.length} localidades</summary>${secHtml(allSections?{done,total}:null)}${result(votes)}${ballotHtml(allBallots?{white,nulls,total:null}:null,votes)}</details>`;
- }).join('');
- return `<div class="row"><h3>Detalhamento do Exterior por país</h3><p class="muted">${esc(abroadMessage)}</p><button onclick="loadAbroad()" ${abroadLoading?'disabled':''}>${abroadLoading?'Consultando…':'Carregar / atualizar países'}</button>${cards}${unmatched?`<p class="muted">${unmatched} localidades com país não identificado. Nenhum país foi presumido.</p>`:''}</div>`;
+ let cards=Object.entries(porPais).sort((a,b)=>Object.values(b[1].votos).reduce((t,v)=>t+v,0)-Object.values(a[1].votos).reduce((t,v)=>t+v,0)).map(([pais,a])=>'<div class="row"><h3>'+pais.replaceAll('<','&lt;')+'</h3>'+result(a.votos)+'<small>Brancos: '+a.brancos.toLocaleString('pt-BR')+' · Nulos: '+a.nulos.toLocaleString('pt-BR')+' · Seções: '+a.secoes.reduce((t,v)=>t+v.done,0)+' de '+a.secoes.reduce((t,v)=>t+v.total,0)+'</small></div>').join('');
+ const total=ok.reduce((a,x)=>a+Object.values(x.resultado).reduce((t,v)=>t+v,0),0);
+ const oficial=Object.values(data.ZZ||{}).reduce((a,v)=>a+v,0);
+ return '<h3>Detalhamento do Exterior por país</h3><p class="muted">'+ok.length+' de '+lista.length+' localidades recebidas. '+faltas.length+' pendentes. Votos válidos somados: '+total.toLocaleString('pt-BR')+'; total oficial Exterior: '+oficial.toLocaleString('pt-BR')+'. '+(faltas.length===0&&total===oficial?'Conferência de votos válida.':'Conferência ainda não concluída; não interpretar como total definitivo.')+'</p>'+(exteriorErro?'<p class="error">'+exteriorErro+'</p>':'')+cards;
 }
-async function loadAbroad(){
- abroadMessage='Detalhamento por país temporariamente desativado: o endpoint de configuração retornou HTTP 429. O consolidado do Exterior continua disponível. Não serão feitas consultas adicionais.';draw();return;
- if(abroadLoading)return;if(Date.now()<abroadCooldownUntil){abroadMessage='O TSE limitou as consultas (HTTP 429). Aguarde '+Math.ceil((abroadCooldownUntil-Date.now())/60000)+' minutos antes de tentar novamente.';draw();return}abroadLoading=true;abroadMessage='Consultando a lista oficial de localidades…';draw();
- try{
- const res=await fetch(abroadConfigUrl);if(res.status===429){abroadThrottle();throw Error('TSE limitou o acesso (HTTP 429). Nova tentativa liberada em 15 minutos.')}if(!res.ok)throw Error('Configuração do TSE: HTTP '+res.status);
- const conf=await res.json();
- const all=Array.isArray(conf)?conf:(conf.abr||conf.mun||conf.municipios||[]);
- let cities=[];
- function walk(obj,depth=0){if(depth>5||!obj)return;if(Array.isArray(obj)){obj.forEach(x=>walk(x,depth+1));return}if(typeof obj==='object'){
- const code=obj.cd, name=obj.nm;
- if(code!=null&&name&&String(code).match(/^\d{4,6}$/)&&(!obj.sg||String(obj.sg).toUpperCase()==='ZZ'))cities.push({cd:String(code),nm:name});
- Object.values(obj).forEach(x=>{if(typeof x==='object')walk(x,depth+1)})}}
- walk(all);abroadCities=[...new Map(cities.map(x=>[x.cd,x])).values()];
- if(!abroadCities.length)throw Error('Lista de localidades não reconhecida; nenhuma informação inventada.');abroadSave();
- abroadMessage=`${abroadCities.length} localidades encontradas. Consultando resultados com limite de velocidade…`;draw();
- // Country mapping is not in the official TSE configuration. Avoid assigning guessed countries.
- let ok=Object.keys(abroadCache).length;
- for(const c of abroadCities){
-  if(Date.now()<abroadCooldownUntil)break;
-  if(abroadCache[c.cd])continue;
+async function carregarPaises(){
+ if(exteriorEmAndamento)return;
+ const lista=window.EXTERIOR_LOCALIDADES;
+ if(!Array.isArray(lista)||!lista.length)return;
+ exteriorEmAndamento=true;exteriorCarregado=true;exteriorErro='';exteriorLocais=[];draw();
+ const pausa=ms=>new Promise(r=>setTimeout(r,ms));
+ for(const x of lista){
+  const codigo=String(x.codigo||'').padStart(5,'0');
+  if(!/^\d{5}$/.test(codigo)||!x.pais){exteriorErro='Tabela local contém código ou país inválido.';break}
   try{
-   const u=`${BASE}zz/zz${c.cd}-c0001-e006258-u.json`;
-   const r=await fetch(u);
-   if(r.status===429){abroadThrottle();abroadMessage='Limite do TSE atingido (HTTP 429). Pausa automática de 15 minutos; dados já recebidos foram preservados.';break}
-   if(r.ok){const j=await r.json(),votes=parse(j);if(votes){abroadCache[c.cd]={votes,sections:sec(j),ballots:ballotInfo(j)};ok++;abroadSave()}}
-  }catch(e){}
-  if(ok%8===0){abroadMessage=`${ok} localidades consultadas; agrupamento por país ainda depende de correspondência validada.`;draw()}
-  await abroadWait(1800);
+   const u=BASE+'zz/zz'+codigo+'-c0001-e006258-u.json';
+   const resp=await fetch(u,{cache:'no-store'});
+   if(resp.status===429){exteriorErro='TSE retornou HTTP 429. Consultas interrompidas.';break}
+   if(!resp.ok){exteriorLocais.push({...x,resultado:null});continue}
+   const j=await resp.json();
+   exteriorLocais.push({...x,resultado:parse(j),secoes:sec(j),boletim:ballotInfo(j)});
+  }catch(e){exteriorLocais.push({...x,resultado:null})}
+  await pausa(1200);
  }
- if(Date.now()>=abroadCooldownUntil)abroadMessage=`${ok} de ${abroadCities.length} localidades consultadas. O agrupamento por país depende de tabela validada.`;
-
- }catch(e){abroadMessage='Não foi possível carregar o detalhamento: '+e.message}
- finally{abroadLoading=false;draw()}
+ exteriorEmAndamento=false;draw();
 }
 const drawOriginal=draw;
-draw=function(){drawOriginal();if(document.querySelector('#region').value==='Exterior')document.querySelector('#states').insertAdjacentHTML('beforeend',abroadHtml())};
+draw=function(){
+ drawOriginal();
+ if(document.querySelector('#region').value==='Exterior'){
+  document.querySelector('#states').insertAdjacentHTML('beforeend',exteriorPainel());
+ }
+};
 
-update();setInterval(update,60000);
-</script></body></html>
+update();setInterval(update,30000);
+</script><script src="exterior-localidades.js"></script></body></html>
