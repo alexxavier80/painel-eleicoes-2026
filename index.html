@@ -17,7 +17,7 @@ function draw(){document.querySelector('#br').innerHTML=result(national||{});doc
 async function update(){
  const stamp=Date.now(),nonce='v='+stamp;
  const get=async url=>{const r=await fetch(url+(url.includes('?')?'&':'?')+nonce,{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return r.json()};
- let success=0,official='';
+ let success=0,exteriorOk=false,official='';
  try{
   const br=await get(`${BASE}br/br-c0001-e006258-u.json`);
   const parsed=parse(br);
@@ -33,10 +33,10 @@ async function update(){
   try{
    const j=await get(`${BASE}${uf.toLowerCase()}/${uf.toLowerCase()}-c0001-e006258-u.json`);
    const parsed=parse(j);
-   if(parsed){data[uf]=parsed;success++}
+   if(parsed){data[uf]=parsed;if(uf==='ZZ')exteriorOk=true;else success++}
   }catch(e){}
  }));
- document.querySelector('#status').textContent=`Consulta: ${new Date().toLocaleTimeString('pt-BR')} · ${success} de 27 UFs consultadas · Oficial: ${official||'indisponível'}`;
+ document.querySelector('#status').textContent=`Consulta: ${new Date().toLocaleTimeString('pt-BR')} · ${success} de 27 UFs consultadas · Exterior: ${exteriorOk?'consultado':'indisponível'} · Oficial: ${official||'indisponível'}`;
  draw();
 }
 update();setInterval(update,30000);
