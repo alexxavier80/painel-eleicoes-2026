@@ -57,8 +57,8 @@ function draw(){
 }
 async function update(){
  const stamp=Date.now(),nonce='v='+stamp;
- const get=async url=>{const r=await fetch(url+(url.includes('?')?'&':'?')+nonce,{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status+' em '+url);return r.json()};
- let success=0,exteriorOk=false,official='',failures=[];
+ const get=async url=>{const r=await fetch(url+(url.includes('?')?'&':'?')+nonce,{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return r.json()};
+ let success=0,exteriorOk=false,official='';
  try{
   const br=await get(`${BASE}br/br-c0001-e006258-u.json`);
   const parsed=parse(br);
@@ -77,10 +77,66 @@ async function update(){
    const j=await get(`${BASE}${uf.toLowerCase()}/${uf.toLowerCase()}-c0001-e006258-u.json`);
    const parsed=parse(j);
    if(parsed){data[uf]=parsed;sections[uf]=sec(j);ballotData[uf]=ballotInfo(j);if(uf==='ZZ')exteriorOk=true;else success++}
-  }catch(e){failures.push(uf+': '+e.message)}
+  }catch(e){}
  }));
  document.querySelector('#status').textContent=`Consulta: ${new Date().toLocaleTimeString('pt-BR')} · ${success} de 27 UFs consultadas · Exterior: ${exteriorOk?'consultado':'indisponível'} · Oficial: ${official||'indisponível'}`;
  draw();
 }
+
+let abroadCities=[], abroadCountryMap={}, abroadCache={}, abroadLoading=false, abroadMessage='Selecione “Carregar países” para consultar as localidades do exterior.';
+const abroadConfigUrl=BASE.replace('/dados/','/config/')+'mun-e006258-cm.json';
+const abroadMapUrl='https://raw.githubusercontent.com/danfigueroa/segundo-turno-brasil/main/apps/api/src/adapters/tse/abroad-cities.ts';
+function esc(t){return String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function abroadHtml(){
+ const country={};let unmatched=0;
+ for(const city of abroadCities){
+  const item=abroadCache[city.cd];if(!item)continue;
+  const p=abroadCountryMap[city.cd]||'País não identificado';
+  (country[p]??=[]).push(item);
+  if(p==='País não identificado')unmatched++;
+ }
+ const cards=Object.entries(country).sort((a,b)=>a[0].localeCompare(b[0],'pt-BR')).map(([name,items])=>{
+ const votes={};let done=0,total=0,white=0,nulls=0,allSections=true,allBallots=true;
+ for(const it of items){Object.entries(it.votes).forEach(([k,v])=>votes[k]=(votes[k]||0)+v);
+ if(it.sections){done+=it.sections.done;total+=it.sections.total}else allSections=false;
+ if(it.ballots){white+=it.ballots.white;nulls+=it.ballots.nulls}else allBallots=false}
+ return `<details class="card"><summary><strong>${esc(name)}</strong> · ${items.length} localidades</summary>${secHtml(allSections?{done,total}:null)}${result(votes)}${ballotHtml(allBallots?{white,nulls,total:null}:null,votes)}</details>`;
+ }).join('');
+ return `<div class="row"><h3>Detalhamento do Exterior por país</h3><p class="muted">${esc(abroadMessage)}</p><button onclick="loadAbroad()" ${abroadLoading?'disabled':''}>${abroadLoading?'Consultando…':'Carregar / atualizar países'}</button>${cards}${unmatched?`<p class="muted">${unmatched} localidades com país não identificado. Nenhum país foi presumido.</p>`:''}</div>`;
+}
+async function loadAbroad(){
+ if(abroadLoading)return;abroadLoading=true;abroadMessage='Consultando a lista oficial de localidades…';draw();
+ try{
+ const res=await fetch(abroadConfigUrl,{cache:'no-store'});if(!res.ok)throw Error('Configuração do TSE: HTTP '+res.status);
+ const conf=await res.json();
+ const all=Array.isArray(conf)?conf:(conf.abr||conf.mun||conf.municipios||[]);
+ let cities=[];
+ function walk(obj,depth=0){if(depth>5||!obj)return;if(Array.isArray(obj)){obj.forEach(x=>walk(x,depth+1));return}if(typeof obj==='object'){
+ const code=obj.cd, name=obj.nm;
+ if(code!=null&&name&&String(code).match(/^\d{4,6}$/)&&(!obj.sg||String(obj.sg).toUpperCase()==='ZZ'))cities.push({cd:String(code),nm:name});
+ Object.values(obj).forEach(x=>{if(typeof x==='object')walk(x,depth+1)})}}
+ walk(all);abroadCities=[...new Map(cities.map(x=>[x.cd,x])).values()];
+ if(!abroadCities.length)throw Error('Lista de localidades não reconhecida; nenhuma informação inventada.');
+ abroadMessage=`${abroadCities.length} localidades encontradas. Consultando resultados com limite de velocidade…`;draw();
+ // Country mapping is not in the official TSE configuration. Avoid assigning guessed countries.
+ let ok=0;
+ for(let i=0;i<abroadCities.length;i+=3){
+  await Promise.all(abroadCities.slice(i,i+3).map(async c=>{
+   try{const u=`${BASE}zz/zz${c.cd}-c0001-e006258-u.json`;
+    const r=await fetch(u,{cache:'no-store'});if(!r.ok)return;
+    const j=await r.json(),votes=parse(j);if(!votes)return;
+    abroadCache[c.cd]={votes,sections:sec(j),ballots:ballotInfo(j)};ok++;
+   }catch(e){}
+  }));
+  if(i%24===0){abroadMessage=`${ok} localidades com dados oficiais consultados. Identificação de países pendente de tabela validada.`;draw()}
+  await new Promise(r=>setTimeout(r,220));
+ }
+ abroadMessage=`${ok} de ${abroadCities.length} localidades consultadas. Para agrupar por país, ainda é necessária a tabela de correspondência validada.`;
+ }catch(e){abroadMessage='Não foi possível carregar o detalhamento: '+e.message}
+ finally{abroadLoading=false;draw()}
+}
+const drawOriginal=draw;
+draw=function(){drawOriginal();if(document.querySelector('#region').value==='Exterior')document.querySelector('#states').insertAdjacentHTML('beforeend',abroadHtml())};
+
 update();setInterval(update,30000);
 </script></body></html>
