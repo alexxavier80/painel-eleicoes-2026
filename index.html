@@ -85,7 +85,12 @@ async function update(){
 
 let abroadCities=[], abroadCountryMap={}, abroadCache={}, abroadLoading=false, abroadMessage='Selecione “Carregar países” para consultar as localidades do exterior.';
 const abroadConfigUrl=BASE.replace('/dados/','/config/')+'mun-e006258-cm.json';
-const abroadMapUrl='https://raw.githubusercontent.com/danfigueroa/segundo-turno-brasil/main/apps/api/src/adapters/tse/abroad-cities.ts';
+const abroadWait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+let abroadCooldownUntil=0;
+try{abroadCooldownUntil=Number(localStorage.getItem('abroadCooldownUntil')||0)}catch(e){}
+try{abroadCache=JSON.parse(localStorage.getItem('abroadCache')||'{}');abroadCities=JSON.parse(localStorage.getItem('abroadCities')||'[]')}catch(e){}
+function abroadSave(){try{localStorage.setItem('abroadCache',JSON.stringify(abroadCache));localStorage.setItem('abroadCities',JSON.stringify(abroadCities))}catch(e){}}
+function abroadThrottle(seconds=900){abroadCooldownUntil=Date.now()+seconds*1000;try{localStorage.setItem('abroadCooldownUntil',String(abroadCooldownUntil))}catch(e){}}
 function esc(t){return String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function abroadHtml(){
  const country={};let unmatched=0;
@@ -105,9 +110,9 @@ function abroadHtml(){
  return `<div class="row"><h3>Detalhamento do Exterior por país</h3><p class="muted">${esc(abroadMessage)}</p><button onclick="loadAbroad()" ${abroadLoading?'disabled':''}>${abroadLoading?'Consultando…':'Carregar / atualizar países'}</button>${cards}${unmatched?`<p class="muted">${unmatched} localidades com país não identificado. Nenhum país foi presumido.</p>`:''}</div>`;
 }
 async function loadAbroad(){
- if(abroadLoading)return;abroadLoading=true;abroadMessage='Consultando a lista oficial de localidades…';draw();
+ if(abroadLoading)return;if(Date.now()<abroadCooldownUntil){abroadMessage='O TSE limitou as consultas (HTTP 429). Aguarde '+Math.ceil((abroadCooldownUntil-Date.now())/60000)+' minutos antes de tentar novamente.';draw();return}abroadLoading=true;abroadMessage='Consultando a lista oficial de localidades…';draw();
  try{
- const res=await fetch(abroadConfigUrl,{cache:'no-store'});if(!res.ok)throw Error('Configuração do TSE: HTTP '+res.status);
+ const res=await fetch(abroadConfigUrl);if(res.status===429){abroadThrottle();throw Error('TSE limitou o acesso (HTTP 429). Nova tentativa liberada em 15 minutos.')}if(!res.ok)throw Error('Configuração do TSE: HTTP '+res.status);
  const conf=await res.json();
  const all=Array.isArray(conf)?conf:(conf.abr||conf.mun||conf.municipios||[]);
  let cities=[];
@@ -116,22 +121,24 @@ async function loadAbroad(){
  if(code!=null&&name&&String(code).match(/^\d{4,6}$/)&&(!obj.sg||String(obj.sg).toUpperCase()==='ZZ'))cities.push({cd:String(code),nm:name});
  Object.values(obj).forEach(x=>{if(typeof x==='object')walk(x,depth+1)})}}
  walk(all);abroadCities=[...new Map(cities.map(x=>[x.cd,x])).values()];
- if(!abroadCities.length)throw Error('Lista de localidades não reconhecida; nenhuma informação inventada.');
+ if(!abroadCities.length)throw Error('Lista de localidades não reconhecida; nenhuma informação inventada.');abroadSave();
  abroadMessage=`${abroadCities.length} localidades encontradas. Consultando resultados com limite de velocidade…`;draw();
  // Country mapping is not in the official TSE configuration. Avoid assigning guessed countries.
- let ok=0;
- for(let i=0;i<abroadCities.length;i+=3){
-  await Promise.all(abroadCities.slice(i,i+3).map(async c=>{
-   try{const u=`${BASE}zz/zz${c.cd}-c0001-e006258-u.json`;
-    const r=await fetch(u,{cache:'no-store'});if(!r.ok)return;
-    const j=await r.json(),votes=parse(j);if(!votes)return;
-    abroadCache[c.cd]={votes,sections:sec(j),ballots:ballotInfo(j)};ok++;
-   }catch(e){}
-  }));
-  if(i%24===0){abroadMessage=`${ok} localidades com dados oficiais consultados. Identificação de países pendente de tabela validada.`;draw()}
-  await new Promise(r=>setTimeout(r,220));
+ let ok=Object.keys(abroadCache).length;
+ for(const c of abroadCities){
+  if(Date.now()<abroadCooldownUntil)break;
+  if(abroadCache[c.cd])continue;
+  try{
+   const u=`${BASE}zz/zz${c.cd}-c0001-e006258-u.json`;
+   const r=await fetch(u);
+   if(r.status===429){abroadThrottle();abroadMessage='Limite do TSE atingido (HTTP 429). Pausa automática de 15 minutos; dados já recebidos foram preservados.';break}
+   if(r.ok){const j=await r.json(),votes=parse(j);if(votes){abroadCache[c.cd]={votes,sections:sec(j),ballots:ballotInfo(j)};ok++;abroadSave()}}
+  }catch(e){}
+  if(ok%8===0){abroadMessage=`${ok} localidades consultadas; agrupamento por país ainda depende de correspondência validada.`;draw()}
+  await abroadWait(1800);
  }
- abroadMessage=`${ok} de ${abroadCities.length} localidades consultadas. Para agrupar por país, ainda é necessária a tabela de correspondência validada.`;
+ if(Date.now()>=abroadCooldownUntil)abroadMessage=`${ok} de ${abroadCities.length} localidades consultadas. O agrupamento por país depende de tabela validada.`;
+
  }catch(e){abroadMessage='Não foi possível carregar o detalhamento: '+e.message}
  finally{abroadLoading=false;draw()}
 }
