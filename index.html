@@ -57,8 +57,8 @@ function draw(){
 }
 async function update(){
  const stamp=Date.now(),nonce='v='+stamp;
- const get=async url=>{const r=await fetch(url+(url.includes('?')?'&':'?')+nonce,{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return r.json()};
- let success=0,exteriorOk=false,official='';
+ const get=async url=>{const r=await fetch(url+(url.includes('?')?'&':'?')+nonce,{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status+' em '+url);return r.json()};
+ let success=0,exteriorOk=false,official='',failures=[];
  try{
   const br=await get(`${BASE}br/br-c0001-e006258-u.json`);
   const parsed=parse(br);
@@ -77,7 +77,7 @@ async function update(){
    const j=await get(`${BASE}${uf.toLowerCase()}/${uf.toLowerCase()}-c0001-e006258-u.json`);
    const parsed=parse(j);
    if(parsed){data[uf]=parsed;sections[uf]=sec(j);ballotData[uf]=ballotInfo(j);if(uf==='ZZ')exteriorOk=true;else success++}
-  }catch(e){}
+  }catch(e){failures.push(uf+': '+e.message)}
  }));
  document.querySelector('#status').textContent=`Consulta: ${new Date().toLocaleTimeString('pt-BR')} · ${success} de 27 UFs consultadas · Exterior: ${exteriorOk?'consultado':'indisponível'} · Oficial: ${official||'indisponível'}`;
  draw();
