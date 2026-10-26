@@ -59,7 +59,7 @@ function diferencaPp(o){
  const votosDiferenca=entries[0][1]-entries[1][1];
  const diff=100*votosDiferenca/total;
  const lider=entries[0][0].replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
- return `<div class="secoes diferencial"><strong>Diferença de votos: ${votosDiferenca.toLocaleString('pt-BR')} votos</strong><br><strong>Diferença percentual: ${diff.toFixed(2).replace('.',',')} pontos percentuais (p.p.)</strong><br><small>Vantagem de ${lider} sobre o segundo colocado · percentual dos votos válidos</small></div>`;
+ return `<div class="secoes diferencial"><strong>Diferença percentual: ${diff.toFixed(2).replace('.',',')} pontos percentuais (p.p.)</strong><br><strong>Diferença de votos: ${votosDiferenca.toLocaleString('pt-BR')} votos</strong><br><small>Vantagem de ${lider} sobre o segundo colocado · percentual dos votos válidos</small></div>`;
 }
 function result(o){let entries=Object.entries(o).sort((a,b)=>b[1]-a[1]);if(!entries.length)return '<small>Sem dados oficiais disponíveis</small>';let total=entries.reduce((s,x)=>s+x[1],0);return entries.map(([n,v],i)=>`<div class="row"><strong>${n.replaceAll('<','&lt;')}</strong> · ${total?(100*v/total).toFixed(2):'0'}% · ${v.toLocaleString('pt-BR')} votos<div class="bar"><span style="width:${total?100*v/total:0}%;background:${(/LULA/i.test(n)?'#dc3545':/FLAVIO|FLÁVIO/i.test(n)?'#159447':'#8e9ac0')}"></span></div></div>`).join('')+diferencaPp(o);}
 function draw(){
